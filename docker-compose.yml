@@ -1,0 +1,45 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-250}
+      MAX_ANALYSIS_SECONDS: ${MAX_ANALYSIS_SECONDS:-180}
+      MAX_CONCURRENT_ANALYSES: ${MAX_CONCURRENT_ANALYSES:-1}
+      AUDIO_TEMP_DIR: /tmp/tapper-audio
+    volumes:
+      - audio-temp:/tmp/tapper-audio
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  audio-temp:
+  caddy-data:
+  caddy-config:

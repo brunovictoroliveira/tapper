@@ -1,0 +1,45 @@
+{
+  "name": "Tapper - React e Codex",
+
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  "remoteUser": "node",
+
+  "forwardPorts": [
+    5173
+  ],
+
+  "portsAttributes": {
+    "5173": {
+      "label": "Vite Development Server",
+      "onAutoForward": "openBrowser"
+    }
+  },
+
+  "mounts": [
+    "source=codex-cli-data,target=/home/node/.codex,type=volume"
+  ],
+
+  "postCreateCommand": "sudo chown -R node:node /home/node/.codex && echo '=== Ambiente instalado ===' && node --version && npm --version && codex --version",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint"
+      ],
+
+      "settings": {
+        "eslint.validate": [
+          "javascript",
+          "javascriptreact"
+        ],
+
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        }
+      }
+    }
+  }
+}
