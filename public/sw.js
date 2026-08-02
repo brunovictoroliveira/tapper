@@ -1,5 +1,5 @@
-const CACHE = 'tapper-v2'
-const ASSETS = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg']
+const CACHE = 'tapper-v3'
+const ASSETS = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/icons.svg']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS)))

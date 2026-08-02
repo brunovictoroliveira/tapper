@@ -20,7 +20,7 @@ function KeyIcon() {
 export default function HomePage() {
   return (
     <main className="app-shell home-shell">
-      <Header action={<span className="topbar-label">FERRAMENTAS MUSICAIS</span>} />
+      <Header action={<a className="topbar-link" href="/account">TAPPER CLOUD</a>} />
 
       <section className="home-hero">
         <p className="eyebrow">OUÇA. MEÇA. DESCUBRA.</p>
@@ -53,8 +53,8 @@ export default function HomePage() {
       </section>
 
       <footer className="home-footer">
-        <span>PROCESSAMENTO SEGURO</span>
-        <span>ÁUDIO DESCARTADO APÓS A ANÁLISE</span>
+        <span>PROCESSAMENTO LOCAL</span>
+        <span><a href="/privacy">PRIVACIDADE</a> · <a href="/terms">TERMOS</a></span>
       </footer>
     </main>
   )

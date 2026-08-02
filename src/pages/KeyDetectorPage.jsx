@@ -1,71 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import Header from '../components/Header.jsx'
+import { useKeyDetection } from '../features/key-detection/hooks/useKeyDetection.js'
+import { LocalSongHistory } from '../features/local-library/components/LocalSongHistory.jsx'
+import { useLocalSongHistory } from '../features/local-library/hooks/useLocalSongHistory.js'
+import { localProjectRepository } from '../repositories/localProjectRepository.js'
+import { localSongRepository } from '../repositories/localSongRepository.js'
 
 const MAX_FILE_SIZE = 250 * 1024 * 1024
 const MAX_RECORDING_SECONDS = 30
-const API_BASE = import.meta.env.VITE_API_URL || ''
 
 function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-}
-
-function uploadAudio(file, analysisId, onProgress, signal) {
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest()
-    const form = new FormData()
-    form.append('audio', file)
-
-    request.open('POST', `${API_BASE}/api/analyze-key?analysis_id=${encodeURIComponent(analysisId)}`)
-    request.timeout = 10 * 60 * 1000
-    request.responseType = 'json'
-    request.upload.onprogress = (event) => {
-      if (!event.lengthComputable) return
-      const uploadPercent = Math.round((event.loaded / event.total) * 24)
-      onProgress(uploadPercent, 'Enviando o áudio')
-    }
-    request.upload.onload = () => onProgress(25, 'Upload concluído')
-    request.onload = () => {
-      if (request.status >= 200 && request.status < 300) {
-        resolve(request.response)
-        return
-      }
-      reject(new Error(request.response?.detail || 'Não foi possível analisar este áudio.'))
-    }
-    request.onerror = () => reject(new Error('Não foi possível conectar ao servidor de análise.'))
-    request.ontimeout = () => reject(new Error('A análise demorou mais do que o esperado.'))
-    request.onabort = () => reject(new DOMException('Upload cancelado.', 'AbortError'))
-    signal.addEventListener('abort', () => request.abort(), { once: true })
-    request.send(form)
-  })
-}
-
-function watchAnalysisProgress(analysisId, onProgress, signal) {
-  let stopped = false
-  let timer = null
-
-  async function poll() {
-    try {
-      const response = await fetch(`${API_BASE}/api/analyze-key/progress/${analysisId}`, {
-        cache: 'no-store',
-        signal,
-      })
-      if (response.ok) {
-        const update = await response.json()
-        onProgress(update.progress, update.stage)
-      }
-    } catch (pollError) {
-      if (pollError.name === 'AbortError') return
-    }
-
-    if (!stopped) timer = window.setTimeout(poll, 350)
-  }
-
-  poll()
-  return () => {
-    stopped = true
-    if (timer) window.clearTimeout(timer)
-  }
 }
 
 function RecordIcon() {
@@ -82,30 +28,43 @@ export default function KeyDetectorPage() {
   const [previewUrl, setPreviewUrl] = useState('')
   const [isRecording, setIsRecording] = useState(false)
   const [recordingSeconds, setRecordingSeconds] = useState(0)
-  const [status, setStatus] = useState('idle')
-  const [progress, setProgress] = useState(0)
-  const [stage, setStage] = useState('Pronto para analisar')
-  const [result, setResult] = useState(null)
-  const [error, setError] = useState('')
+  const {
+    status,
+    progress,
+    result,
+    error,
+    analyze,
+    cancel,
+    reset: resetAnalysis,
+    restore: restoreAnalysis,
+    setError,
+  } = useKeyDetection()
+  const localHistory = useLocalSongHistory()
   const recorderRef = useRef(null)
   const streamRef = useRef(null)
   const chunksRef = useRef([])
-  const abortRef = useRef(null)
-  const progressRef = useRef(0)
 
-  function applyProgress(nextProgress, nextStage) {
-    const normalized = Math.max(0, Math.min(100, Math.round(nextProgress)))
-    if (normalized < progressRef.current) return
-    progressRef.current = normalized
-    setProgress(normalized)
-    if (nextStage) setStage(nextStage)
-  }
-
-  function resetProgress() {
-    progressRef.current = 0
-    setProgress(0)
-    setStage('Pronto para analisar')
-  }
+  useEffect(() => {
+    const projectId = new URLSearchParams(globalThis.location.search).get('project')
+    if (!projectId) return
+    Promise.all([
+      localProjectRepository.findById(projectId),
+      localProjectRepository.findById(projectId).then((project) => project?.songId ? localSongRepository.findById(project.songId) : null),
+    ]).then(([project, song]) => {
+      if (!project) return
+      const state = project.projectState || {}
+      restoreAnalysis({
+        key: state.detectedKey || state.selectedKey || song?.detectedKey || '—',
+        mode: state.detectedMode || song?.detectedMode || 'unknown',
+        confidence: state.confidence || song?.detectionConfidence || 0,
+        durationMs: song?.durationMs || 0,
+        camelot: song?.camelot || '—',
+        alternative: song?.alternative || { display: '—', camelot: '—' },
+        analyzedAt: song?.analyzedAt || project.updatedAt,
+        restoredProject: project,
+      })
+    }).catch((restoreError) => setError(restoreError.message))
+  }, [restoreAnalysis, setError])
 
   function releaseMicrophone() {
     streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -121,15 +80,11 @@ export default function KeyDetectorPage() {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     setAudioFile(file)
     setPreviewUrl(URL.createObjectURL(file))
-    setResult(null)
-    setError('')
-    setStatus('idle')
-    resetProgress()
+    resetAnalysis()
   }
 
   async function startRecording() {
-    setError('')
-    setResult(null)
+    resetAnalysis()
 
     try {
       if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
@@ -190,39 +145,17 @@ export default function KeyDetectorPage() {
   }, [isRecording])
 
   useEffect(() => () => {
-    abortRef.current?.abort()
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
     releaseMicrophone()
     if (previewUrl) URL.revokeObjectURL(previewUrl)
   }, [previewUrl])
 
-  async function analyze() {
-    if (!audioFile) return
-    const controller = new AbortController()
-    const analysisId = window.crypto.randomUUID()
-    abortRef.current = controller
-    setStatus('analyzing')
-    progressRef.current = 0
-    applyProgress(1, 'Preparando o upload')
-    setResult(null)
-    setError('')
-
-    const stopWatching = watchAnalysisProgress(analysisId, applyProgress, controller.signal)
-    try {
-      const analysis = await uploadAudio(audioFile, analysisId, applyProgress, controller.signal)
-      applyProgress(100, 'Análise concluída')
-      setResult(analysis)
-      setStatus('done')
-    } catch (uploadError) {
-      if (uploadError.name !== 'AbortError') setError(uploadError.message)
-      setStatus('idle')
-    } finally {
-      stopWatching()
-      abortRef.current = null
-    }
-  }
-
   const isBusy = status === 'analyzing'
+
+  async function analyzeAndSave() {
+    const analysis = await analyze(audioFile)
+    if (analysis) await localHistory.saveAnalysis(analysis, audioFile)
+  }
 
   return (
     <main className="app-shell key-shell">
@@ -269,26 +202,26 @@ export default function KeyDetectorPage() {
             {audioFile && !isRecording && (
               <div className="audio-ready">
                 <audio controls src={previewUrl}>Seu navegador não suporta áudio.</audio>
-                <button className="primary-button" type="button" disabled={isBusy} onClick={analyze}>
+                <button className="primary-button" type="button" disabled={isBusy} onClick={analyzeAndSave}>
                   {isBusy ? 'Analisando áudio…' : 'Detectar tonalidade'}
                 </button>
                 {isBusy && (
                   <div className="analysis-progress" aria-live="polite">
                     <div className="progress-status">
-                      <span>{stage}</span>
-                      <strong>{progress}%</strong>
+                      <span>{progress.stage}</span>
+                      <strong>{progress.value}%</strong>
                     </div>
                     <div
                       className="progress-track"
                       role="progressbar"
-                      aria-label={stage}
+                      aria-label={progress.stage}
                       aria-valuemin="0"
                       aria-valuemax="100"
-                      aria-valuenow={progress}
+                      aria-valuenow={progress.value}
                     >
-                      <span style={{ width: `${progress}%` }} />
+                      <span style={{ width: `${progress.value}%` }} />
                     </div>
-                    <button className="cancel-button" type="button" onClick={() => abortRef.current?.abort()}>
+                    <button className="cancel-button" type="button" onClick={cancel}>
                       Cancelar
                     </button>
                   </div>
@@ -302,7 +235,7 @@ export default function KeyDetectorPage() {
           <div className="result-card" aria-live="polite">
             <p className="eyebrow">TONALIDADE DETECTADA</p>
             <div className="key-result">
-              <strong>{result.tonic}</strong>
+              <strong>{result.key}</strong>
               <span>{result.mode === 'major' ? 'MAIOR' : 'MENOR'}</span>
             </div>
             <div className="result-meta">
@@ -311,12 +244,12 @@ export default function KeyDetectorPage() {
               <div><span>ALTERNATIVA</span><strong>{result.alternative.display}</strong></div>
             </div>
             <p className="result-note">Resultado estimado a partir do perfil harmônico da faixa.</p>
+            {result.restoredProject && <p className="restored-project-note">Projeto restaurado: {result.restoredProject.name}</p>}
             <button className="primary-button" type="button" onClick={() => {
               if (previewUrl) URL.revokeObjectURL(previewUrl)
-              setResult(null)
               setAudioFile(null)
               setPreviewUrl('')
-              resetProgress()
+              resetAnalysis()
             }}>
               Analisar outra faixa
             </button>
@@ -324,11 +257,20 @@ export default function KeyDetectorPage() {
         )}
 
         {error && <p className="error-message" role="alert">{error}</p>}
+
+        <LocalSongHistory
+          songs={localHistory.songs}
+          status={localHistory.status}
+          message={localHistory.message}
+          onRemove={localHistory.removeSong}
+          onExport={localHistory.exportBackup}
+          onImport={localHistory.importBackup}
+        />
       </section>
 
       <footer className="privacy-note">
         <span aria-hidden="true">◇</span>
-        O áudio é processado temporariamente e apagado após a análise.
+        O áudio é analisado localmente e não sai deste dispositivo.
       </footer>
     </main>
   )

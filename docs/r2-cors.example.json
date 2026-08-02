@@ -1,0 +1,9 @@
+[
+  {
+    "AllowedOrigins": ["https://SEU-DOMINIO.example", "http://localhost:5173"],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["Content-Type", "x-amz-checksum-sha256"],
+    "ExposeHeaders": ["ETag", "x-amz-checksum-sha256"],
+    "MaxAgeSeconds": 3600
+  }
+]

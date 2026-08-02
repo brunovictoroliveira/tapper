@@ -12,17 +12,15 @@ Navegador
   ├─ /       homepage
   ├─ /tap    Tap BPM local, sem backend
   └─ /key    upload ou MediaRecorder
-                 │ multipart/form-data
-                 ▼
-              FastAPI
-                 ├─ grava o upload em arquivo temporário por blocos de 1 MB
-                 ├─ ffmpeg converte para WAV mono em 22,05 kHz
-                 ├─ librosa extrai o perfil cromático
+                 ├─ Web Audio decodifica no dispositivo
+                 ├─ FFT extrai o perfil cromático
                  ├─ compara 24 perfis tonais maior/menor
-                 └─ apaga os arquivos temporários em finally
+                 └─ mantém o áudio somente no navegador
 ```
 
-O navegador não usa `localStorage` para áudio. Um arquivo escolhido continua representado pelo objeto `File` do navegador e é enviado com progresso. Gravações de microfone são limitadas a 30 segundos para manter o consumo de memória previsível.
+O navegador não usa `localStorage` para áudio. Um arquivo escolhido continua representado pelo objeto `File` e é analisado localmente, sem upload automático. Gravações de microfone são limitadas a 30 segundos para manter o consumo de memória previsível.
+
+Análises e projetos são salvos no IndexedDB do dispositivo. A tela de detecção permite excluir entradas e exportar ou importar um backup JSON versionado.
 
 ## Desenvolvimento
 
@@ -33,79 +31,73 @@ npm install
 npm run dev
 ```
 
-Backend, em outro terminal (Python 3.10+ e `ffmpeg` instalados):
+Validações:
 
 ```bash
-cd backend
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements-dev.txt
-uvicorn app.main:app --reload
+npm run lint
+npm test
+npm run build
 ```
 
-O Vite encaminha `/api` para `http://localhost:8000` durante o desenvolvimento.
+O diretório `backend/` contém a implementação FastAPI anterior e permanece como referência durante a migração. O frontend não depende dela.
 
-## Deploy na Oracle VPS
+## Tapper Cloud
 
-Pré-requisitos:
+Copie `.env.example` para `.env` e configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` para habilitar cadastro, login, recuperação de senha e sessão persistente em `/account`. Essas são as únicas credenciais Supabase permitidas no frontend.
 
-1. Uma instância Ubuntu/Oracle Linux com Docker e Compose.
-2. Um domínio com registro A apontado para o IP público da VPS.
-3. Portas TCP 80/443 e UDP 443 liberadas no Security List/NSG e no firewall da máquina.
-
-Prepare e suba:
+O schema inicial está em `supabase/migrations/202608020001_initial_cloud_schema.sql`. Ele cria perfis, assinaturas, músicas, projetos, cinco versões por projeto, arquivos e eventos de pagamento, com RLS habilitada em todas as tabelas expostas. Para aplicar em um projeto Supabase já criado:
 
 ```bash
-cp .env.example .env
-# Edite DOMAIN no arquivo .env
-docker compose up -d --build
+npx supabase link --project-ref SEU_PROJECT_REF
+npx supabase db push --dry-run
+npx supabase db push
 ```
 
-O Caddy obtém e renova o certificado TLS automaticamente. HTTPS é obrigatório para `getUserMedia` fora de `localhost`.
+O cliente não consegue promover o próprio plano, alterar assinaturas, registrar arquivos ou escrever eventos de pagamento; essas operações serão exclusivas das Functions administrativas.
 
-Para atualizar:
+## Arquivos e pagamentos
 
-```bash
-docker compose up -d --build
-```
+As Netlify Functions em `netlify/functions/` implementam:
 
-Para acompanhar:
+- reserva de cota e URLs temporárias para upload/download direto no Cloudflare R2;
+- confirmação de tamanho e checksum SHA-256 antes de finalizar uploads;
+- exclusão de arquivos e atualização atômica do espaço utilizado;
+- criação, consulta e cancelamento da assinatura Mercado Pago de R$ 9,99;
+- webhook assinado e idempotente;
+- exclusão completa da conta, incluindo objetos privados do R2.
 
-```bash
-docker compose logs -f backend caddy
-```
+Segredos administrativos são lidos somente no runtime das Functions. Consulte o [índice da documentação](docs/README.md) e o [painel de status e tarefas](docs/MANUAL_TASKS.md) para acompanhar itens concluídos, parciais e manuais.
+
+## Deploy no Netlify
+
+O projeto inclui `netlify.toml` e o fallback de rotas SPA em `public/_redirects`. Configure:
+
+- comando de build: `npm run build`;
+- diretório publicado: `dist`;
+- Node.js 20 ou mais recente.
+
+HTTPS continua obrigatório para `getUserMedia` fora de `localhost`.
 
 ## Limites e capacidade
 
-Variáveis em `.env`:
+A tela aceita arquivos de até 250 MB e analisa no máximo os primeiros 180 segundos, distribuindo amostras ao longo desse intervalo para manter o trabalho previsível no navegador.
 
-- `MAX_UPLOAD_MB`: limite do upload; padrão 250 MB.
-- `MAX_ANALYSIS_SECONDS`: trecho máximo decodificado; padrão 180 segundos.
-- `MAX_CONCURRENT_ANALYSES`: análises simultâneas por contêiner; padrão 1.
+A detecção atual é uma estimativa tonal clássica por chroma/Krumhansl. Faixas modais, mudanças de tom e pares relativos como C maior/A menor podem ser ambíguos; por isso a análise também retorna alternativa e confiança.
 
-A fila de concorrência evita que várias FFTs esgotem CPU e memória de uma VPS pequena. Para uma instância ARM Ampere de 4 OCPUs/24 GB, comece com 2 análises simultâneas; para uma VM de 1 GB, mantenha 1 e configure swap. O volume `audio-temp` evita `localStorage` e é limpo após cada requisição bem-sucedida ou com erro.
+## Contrato da análise
 
-A detecção atual é uma estimativa tonal clássica por chroma/Krumhansl. Faixas modais, mudanças de tom e pares relativos como C maior/A menor podem ser ambíguos; por isso a API também retorna alternativa e confiança.
-
-## API
-
-`POST /api/analyze-key?analysis_id=<UUID>`, multipart com campo `audio`. Durante o processamento, `GET /api/analyze-key/progress/<UUID>` retorna `progress`, `stage` e `status` para atualização da interface.
-
-Formatos públicos de arquivo: MP3 e WAV. WebM/OGG são aceitos internamente para as gravações do navegador.
+`detectKey(file, options)` recebe um `File`, `Blob` ou `AudioBuffer` e não depende de React, Supabase ou armazenamento. Formatos públicos: MP3 e WAV. WebM/OGG são usados internamente para gravações, conforme o suporte do navegador.
 
 Exemplo de resposta:
 
 ```json
 {
-  "tonic": "A",
+  "key": "A",
   "mode": "minor",
-  "display": "A menor",
   "camelot": "8A",
   "confidence": 0.84,
   "alternative": { "display": "C maior", "camelot": "8B" },
-  "analyzed_seconds": 94.2,
-  "analysis_version": "chroma-1"
+  "durationMs": 94200,
+  "analysisVersion": "browser-chroma-1"
 }
 ```
-
-Health check: `GET /api/health`.
