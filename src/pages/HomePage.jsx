@@ -1,4 +1,5 @@
 import Header from '../components/Header.jsx'
+import { useAuth } from '../features/auth/hooks/useAuth.js'
 
 function TapIcon() {
   return (
@@ -18,9 +19,16 @@ function KeyIcon() {
 }
 
 export default function HomePage() {
+  const auth = useAuth()
+
+  if (!auth.session && auth.status !== 'loading') {
+    globalThis.location.replace('/login')
+    return null
+  }
+
   return (
     <main className="app-shell home-shell">
-      <Header action={<a className="topbar-link" href="/account">TAPPER CLOUD</a>} />
+      <Header action={auth.entitlement?.isAdmin ? <a className="topbar-link" href="/admin">RELATÓRIOS</a> : null} />
 
       <section className="home-hero">
         <p className="eyebrow">OUÇA. MEÇA. DESCUBRA.</p>

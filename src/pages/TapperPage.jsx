@@ -1,27 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/Header.jsx'
+import { calculateTapBpm, detectBpm } from '../services/bpmDetectionService.js'
+import { saveBpmDetection } from '../services/bpmReportService.js'
 
 const MAX_TAPS = 64
 const IDLE_TIMEOUT = 5000
-
-function calculateBpm(taps) {
-  if (taps.length < 2) return null
-  const intervals = taps
-    .slice(1)
-    .map((tap, index) => tap - taps[index])
-    .filter((interval) => interval > 0)
-
-  if (!intervals.length) return null
-  const sortedIntervals = intervals.toSorted((a, b) => a - b)
-  const trimCount = intervals.length >= 5
-    ? Math.max(1, Math.floor(intervals.length * 0.1))
-    : 0
-  const stableIntervals = trimCount
-    ? sortedIntervals.slice(trimCount, -trimCount)
-    : sortedIntervals
-  const average = stableIntervals.reduce((total, interval) => total + interval, 0) / stableIntervals.length
-  return Math.round(60000 / average)
-}
 
 function getPrecision(tapCount) {
   if (tapCount < 2) return '—'
@@ -34,7 +17,15 @@ function getPrecision(tapCount) {
 export default function TapperPage() {
   const [taps, setTaps] = useState([])
   const [now, setNow] = useState(Date.now())
-  const bpm = useMemo(() => calculateBpm(taps), [taps])
+  const [automaticBpm, setAutomaticBpm] = useState(null)
+  const [automaticConfidence, setAutomaticConfidence] = useState(null)
+  const [analysisStatus, setAnalysisStatus] = useState('')
+  const [songTitle, setSongTitle] = useState('')
+  const [artist, setArtist] = useState('')
+  const [saveStatus, setSaveStatus] = useState('')
+  const [method, setMethod] = useState('manual')
+  const manualBpm = useMemo(() => calculateTapBpm(taps), [taps])
+  const bpm = method === 'automatic' ? automaticBpm : manualBpm
   const isActive = taps.length > 0 && now - taps.at(-1) < IDLE_TIMEOUT
   const elapsed = taps.length > 1 ? (taps.at(-1) - taps[0]) / 1000 : 0
   const precision = getPrecision(taps.length)
@@ -45,12 +36,41 @@ export default function TapperPage() {
   }, [])
 
   function registerTap() {
+    setMethod('manual')
     const timestamp = Date.now()
     setNow(timestamp)
     setTaps((current) => {
       const session = current.length && timestamp - current.at(-1) > IDLE_TIMEOUT ? [] : current
       return [...session, timestamp].slice(-MAX_TAPS)
     })
+  }
+
+  async function analyzeFile(file) {
+    if (!file) return
+    setAnalysisStatus('Preparando análise…')
+    setSaveStatus('')
+    try {
+      const result = await detectBpm(file, { onProgress: setAnalysisStatus })
+      setAutomaticBpm(result.bpm)
+      setAutomaticConfidence(result.confidence)
+      setSongTitle(file.name.replace(/\.[^.]+$/, ''))
+      setMethod('automatic')
+      setAnalysisStatus('BPM detectado.')
+    } catch (error) {
+      setAnalysisStatus(error.message)
+    }
+  }
+
+  async function saveDetection(event) {
+    event.preventDefault()
+    if (!bpm) return
+    setSaveStatus('Salvando…')
+    try {
+      await saveBpmDetection({ songTitle, artist, bpm, method })
+      setSaveStatus('Detecção salva no relatório administrativo.')
+    } catch (error) {
+      setSaveStatus(error.message)
+    }
   }
 
   return (
@@ -80,6 +100,20 @@ export default function TapperPage() {
           <span className="tap-label">TAP</span><span className="tap-hint">toque aqui</span>
         </button>
       </section>
+
+      <section className="bpm-automatic-panel">
+        <div><p className="eyebrow">DETECÇÃO AUTOMÁTICA</p><h2>Envie uma faixa para estimar o BPM</h2><p>O áudio é analisado apenas neste dispositivo.</p></div>
+        <label className="secondary-button">Escolher arquivo<input type="file" accept="audio/*,.mp3,.wav" onChange={(event) => analyzeFile(event.target.files?.[0])} /></label>
+        {analysisStatus && <p className="bpm-analysis-status">{analysisStatus}{automaticConfidence != null && method === 'automatic' ? ` · confiança ${Math.round(automaticConfidence * 100)}%` : ''}</p>}
+      </section>
+
+      {bpm && <form className="bpm-save-panel" onSubmit={saveDetection}>
+        <div><p className="eyebrow">SALVAR MEDIÇÃO</p><h2>{bpm.toFixed(1)} BPM <span>{method === 'automatic' ? 'automático' : 'manual'}</span></h2></div>
+        <label>Nome da música<input required value={songTitle} onChange={(event) => setSongTitle(event.target.value)} placeholder="Ex.: Minha música" /></label>
+        <label>Nome do artista<input value={artist} onChange={(event) => setArtist(event.target.value)} placeholder="Ex.: Artista" /></label>
+        <button className="primary-button" type="submit">Salvar no relatório</button>
+        {saveStatus && <p className="bpm-analysis-status" role="status">{saveStatus}</p>}
+      </form>}
 
       <footer className="stats" aria-label="Estatísticas da medição">
         <div><span>TOQUES</span><strong>{taps.length}</strong></div><i aria-hidden="true" />

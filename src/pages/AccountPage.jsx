@@ -4,9 +4,9 @@ import { useAuth } from '../features/auth/hooks/useAuth.js'
 import { deleteAccount } from '../services/accountService.js'
 import { exportAllAsJson, exportAllAsZip } from '../services/dataExportService.js'
 
-export default function AccountPage({ resetPassword = false }) {
+export default function AccountPage({ resetPassword = false, initialMode = 'sign-in' }) {
   const auth = useAuth()
-  const [mode, setMode] = useState(resetPassword ? 'update-password' : 'sign-in')
+  const [mode, setMode] = useState(resetPassword ? 'update-password' : initialMode)
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

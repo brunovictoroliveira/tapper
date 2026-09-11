@@ -4,7 +4,7 @@ export async function getEntitlement() {
   const supabase = getSupabaseClient()
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
   if (sessionError) throw new Error(sessionError.message)
-  if (!sessionData.session?.user) return { authenticated: false, canWriteCloud: false, profile: null, subscription: null }
+  if (!sessionData.session?.user) return { authenticated: false, canWriteCloud: false, isAdmin: false, profile: null, subscription: null }
 
   const userId = sessionData.session.user.id
   const [profileResult, subscriptionResult] = await Promise.all([
@@ -25,6 +25,7 @@ export async function getEntitlement() {
   return {
     authenticated: true,
     canWriteCloud: active || inGracePeriod,
+    isAdmin: profileResult.data?.role === 'admin',
     profile: profileResult.data,
     subscription,
   }
