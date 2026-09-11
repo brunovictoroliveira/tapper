@@ -288,9 +288,9 @@
 .register-card input { min-height: 44px; }
 .register-card .primary-button { padding: 13px 16px; }
 .confirmation-shell { display: grid; grid-template-rows: auto 1fr; }
-.confirmation-content { align-self: center; display: grid; gap: clamp(55px, 10vh, 120px); width: min(100%, 650px); margin: 0 auto; text-align: center; }
-.confirmation-content h1 { margin: 0; font-size: clamp(2.3rem, 6vw, 4.6rem); letter-spacing: -.075em; line-height: .95; }
-.confirmation-logo { margin: 0; color: var(--ink); font-size: clamp(4.2rem, 10vw, 8rem); font-weight: 900; letter-spacing: -.12em; line-height: .8; }
+.confirmation-content { align-self: center; display: grid; gap: clamp(34px, 6vh, 72px); width: min(100%, 520px); margin: 0 auto; text-align: center; }
+.confirmation-content h1 { margin: 0; font-size: clamp(1.4rem, 3.6vw, 2.75rem); letter-spacing: -.075em; line-height: .95; }
+.confirmation-logo { margin: 0; color: var(--ink); font-size: clamp(2.5rem, 6vw, 4.8rem); font-weight: 900; letter-spacing: -.12em; line-height: .8; }
 .confirmation-logo span { color: var(--orange); }
 
 /* Administration */

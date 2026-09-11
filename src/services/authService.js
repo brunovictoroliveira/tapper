@@ -12,7 +12,10 @@ export const authService = {
     const response = await getSupabaseClient().auth.signUp({
       email,
       password,
-      options: { data: { display_name: displayName.trim() } },
+      options: {
+        data: { display_name: displayName.trim() },
+        emailRedirectTo: `${globalThis.location?.origin || ''}/`,
+      },
     })
     return resultOrThrow(response)
   },
