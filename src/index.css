@@ -11,4 +11,5 @@ html { min-width: 320px; background: #f7f4ed; }
 body { min-width: 320px; min-height: 100vh; margin: 0; }
 button, input { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
-button:focus-visible, a:focus-visible, label:has(input:focus-visible) { outline: 3px solid #191718; outline-offset: 4px; }
+button:focus-visible, a:focus-visible { outline: 3px solid #191718; outline-offset: 4px; }
+input:focus-visible { border-color: #ff5a36 !important; outline: 2px solid #ff5a36; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(255, 90, 54, .13); }
