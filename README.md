@@ -1,37 +1,106 @@
 # Tapper
 
-Aplicação musical com duas ferramentas:
+Aplicação web voltada para análise musical, reunindo ferramentas para detecção de andamento e tonalidade.
 
-- **Tap BPM:** calcula o andamento a partir dos toques do usuário.
-- **Key Detector:** recebe MP3/WAV ou uma gravação curta do microfone e estima tônica, modo e código Camelot.
+## Funcionalidades
 
-## Arquitetura
+### Tap BPM
+
+Permite estimar o BPM (batidas por minuto) de uma música a partir de toques realizados pelo usuário.
+
+### Key Detector
+
+Analisa arquivos de áudio ou gravações curtas do microfone para estimar:
+
+- tônica;
+- modo maior ou menor;
+- código Camelot;
+- nível de confiança;
+- tonalidade alternativa.
+
+A análise principal de áudio é executada diretamente no navegador.
+
+## Processamento de áudio
+
+O Tapper utiliza recursos nativos da Web Audio API para processamento de áudio no dispositivo.
+
+De forma simplificada, o processo de detecção de tonalidade envolve:
 
 ```text
-Navegador
-  ├─ /       homepage
-  ├─ /tap    Tap BPM local, sem backend
-  └─ /key    upload ou MediaRecorder
-                 ├─ Web Audio decodifica no dispositivo
-                 ├─ FFT extrai o perfil cromático
-                 ├─ compara 24 perfis tonais maior/menor
-                 └─ mantém o áudio somente no navegador
+Áudio
+  ↓
+Decodificação
+  ↓
+Análise espectral
+  ↓
+Extração de características tonais
+  ↓
+Estimativa da tonalidade
+  ↓
+Resultado
 ```
 
-O navegador não usa `localStorage` para áudio. Um arquivo escolhido continua representado pelo objeto `File` e é analisado localmente, sem upload automático. Gravações de microfone são limitadas a 30 segundos para manter o consumo de memória previsível.
+Arquivos selecionados para análise são processados localmente no navegador, evitando uploads desnecessários.
 
-Análises e projetos são salvos no IndexedDB do dispositivo. A tela de detecção permite excluir entradas e exportar ou importar um backup JSON versionado.
+Gravações realizadas pelo microfone também são processadas no dispositivo.
+
+## Persistência local
+
+O Tapper permite armazenar localmente análises e projetos no navegador.
+
+O usuário pode:
+
+- consultar análises anteriores;
+- excluir dados armazenados;
+- exportar um backup;
+- importar backups anteriormente exportados.
+
+## Tapper Cloud
+
+O projeto também possui recursos de conta e sincronização em nuvem.
+
+Entre as funcionalidades implementadas estão:
+
+- cadastro e autenticação;
+- recuperação de conta;
+- persistência de sessão;
+- armazenamento de projetos;
+- gerenciamento de arquivos;
+- controle de assinatura;
+- exclusão de conta e dados associados.
+
+A arquitetura separa operações disponíveis ao cliente de operações administrativas executadas no backend.
+
+Credenciais e segredos administrativos não são armazenados no código do frontend.
+
+## Tecnologias
+
+Entre as principais tecnologias utilizadas no projeto estão:
+
+- React;
+- JavaScript;
+- Web Audio API;
+- IndexedDB;
+- Supabase;
+- Netlify Functions;
+- Cloudflare R2;
+- Mercado Pago.
 
 ## Desenvolvimento
 
-Frontend:
+Instale as dependências:
 
 ```bash
 npm install
+```
+
+Inicie o ambiente de desenvolvimento:
+
+```bash
 npm run dev
 ```
 
-Validações:
+### Validação
 
 ```bash
 npm run lint
@@ -39,65 +108,41 @@ npm test
 npm run build
 ```
 
-O diretório `backend/` contém a implementação FastAPI anterior e permanece como referência durante a migração. O frontend não depende dela.
+## Configuração
 
-## Tapper Cloud
+Variáveis públicas necessárias para integrações externas devem ser configuradas através de variáveis de ambiente.
 
-Copie `.env.example` para `.env` e configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` para habilitar cadastro, login, recuperação de senha e sessão persistente em `/account`. Essas são as únicas credenciais Supabase permitidas no frontend.
+Utilize o arquivo `.env.example` como referência para configurar o ambiente local.
 
-O schema inicial está em `supabase/migrations/202608020001_initial_cloud_schema.sql`. Ele cria perfis, assinaturas, músicas, projetos, cinco versões por projeto, arquivos e eventos de pagamento, com RLS habilitada em todas as tabelas expostas. Para aplicar em um projeto Supabase já criado:
+> Segredos, credenciais administrativas e chaves privadas não devem ser adicionados ao repositório.
 
-```bash
-npx supabase link --project-ref SEU_PROJECT_REF
-npx supabase db push --dry-run
-npx supabase db push
-```
+## Limitações da análise
 
-O cliente não consegue promover o próprio plano, alterar assinaturas, registrar arquivos ou escrever eventos de pagamento; essas operações serão exclusivas das Functions administrativas.
+A detecção de tonalidade é uma estimativa baseada em análise de características tonais do áudio.
 
-## Arquivos e pagamentos
+Alguns casos podem apresentar ambiguidade, especialmente:
 
-As Netlify Functions em `netlify/functions/` implementam:
+- músicas com mudanças de tonalidade;
+- composições modais;
+- trechos com pouca informação harmônica;
+- tonalidades relativas, como C maior e A menor.
 
-- reserva de cota e URLs temporárias para upload/download direto no Cloudflare R2;
-- confirmação de tamanho e checksum SHA-256 antes de finalizar uploads;
-- exclusão de arquivos e atualização atômica do espaço utilizado;
-- criação, consulta e cancelamento da assinatura Mercado Pago de R$ 9,99;
-- webhook assinado e idempotente;
-- exclusão completa da conta, incluindo objetos privados do R2.
+Por esse motivo, o Tapper pode apresentar uma tonalidade alternativa e um indicador de confiança juntamente com o resultado principal.
 
-Segredos administrativos são lidos somente no runtime das Functions. Consulte o [índice da documentação](docs/README.md) e o [painel de status e tarefas](docs/MANUAL_TASKS.md) para acompanhar itens concluídos, parciais e manuais.
+## Privacidade
 
-## Deploy no Netlify
+O processamento principal dos arquivos utilizados pelo Key Detector ocorre localmente no navegador.
 
-O projeto inclui `netlify.toml` e o fallback de rotas SPA em `public/_redirects`. Configure:
+Recursos que dependem da conta e da sincronização em nuvem utilizam serviços externos apenas quando necessário para essas funcionalidades.
 
-- comando de build: `npm run build`;
-- diretório publicado: `dist`;
-- Node.js 20 ou mais recente.
+## License
 
-HTTPS continua obrigatório para `getUserMedia` fora de `localhost`.
+This project is proprietary software.
 
-## Limites e capacidade
+The source code is publicly available solely for portfolio, educational review, and evaluation purposes.
 
-A tela aceita arquivos de até 250 MB e analisa no máximo os primeiros 180 segundos, distribuindo amostras ao longo desse intervalo para manter o trabalho previsível no navegador.
+No permission is granted to copy, modify, distribute, sublicense, sell, or use this software or any portion of its source code without explicit authorization from the author.
 
-A detecção atual é uma estimativa tonal clássica por chroma/Krumhansl. Faixas modais, mudanças de tom e pares relativos como C maior/A menor podem ser ambíguos; por isso a análise também retorna alternativa e confiança.
+See the [LICENSE](./LICENSE) file for details.
 
-## Contrato da análise
-
-`detectKey(file, options)` recebe um `File`, `Blob` ou `AudioBuffer` e não depende de React, Supabase ou armazenamento. Formatos públicos: MP3 e WAV. WebM/OGG são usados internamente para gravações, conforme o suporte do navegador.
-
-Exemplo de resposta:
-
-```json
-{
-  "key": "A",
-  "mode": "minor",
-  "camelot": "8A",
-  "confidence": 0.84,
-  "alternative": { "display": "C maior", "camelot": "8B" },
-  "durationMs": 94200,
-  "analysisVersion": "browser-chroma-1"
-}
-```
+Copyright © 2026 Bruno Victor Oliveira. All rights reserved.
