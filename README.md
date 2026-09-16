@@ -135,14 +135,14 @@ O processamento principal dos arquivos utilizados pelo Key Detector ocorre local
 
 Recursos que dependem da conta e da sincronização em nuvem utilizam serviços externos apenas quando necessário para essas funcionalidades.
 
-## License
+## Licença
 
-This project is proprietary software.
+Este projeto é um software proprietário.
 
-The source code is publicly available solely for portfolio, educational review, and evaluation purposes.
+O código-fonte está disponível publicamente apenas para fins de portfólio, análise educacional e avaliação.
 
-No permission is granted to copy, modify, distribute, sublicense, sell, or use this software or any portion of its source code without explicit authorization from the author.
+Não é concedida permissão para copiar, modificar, distribuir, sublicenciar, vender ou utilizar este software ou qualquer parte de seu código-fonte sem autorização expressa do autor.
 
-See the [LICENSE](./LICENSE) file for details.
+Consulte o arquivo LICENSE para obter detalhes.
 
-Copyright © 2026 Bruno Victor Oliveira. All rights reserved.
+Copyright © 2026 Bruno Victor Oliveira. Todos os direitos reservados.
